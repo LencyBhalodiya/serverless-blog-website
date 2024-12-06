@@ -1,21 +1,57 @@
+import { PrismaClient } from '@prisma/client/edge'
+import { withAccelerate } from '@prisma/extension-accelerate'
 import { Hono } from 'hono'
+import { sign } from 'hono/jwt'
 
-const userRouter = new Hono()
+type Bindings = {
+  DATABASE_URL: string,
+  JWT_SECRET: string
+}
+const userRouter = new Hono<{ Bindings: Bindings }>()
 
-userRouter.get('/signup', (c) => {
+userRouter.get('/signup', async (c) => {
+  const prisma = new PrismaClient({
+    datasourceUrl: c.env.DATABASE_URL,
+}).$extends(withAccelerate())
+  
+ const body = await c.req.json();
+ const { email, password } = body;
+
+ const user =  await prisma.user.create({
+    data: {
+        email,
+      password,
+    },
+  })
+  
+  const token = await sign({ id: user.id }, c.env.JWT_SECRET)
+  
   return c.json({
-    message: 'Get all users'
+    jwt: token
   })
 })
-// postgresql://postsql_owner:dG4jCzEestD3@ep-quiet-dew-a70f2ah1.ap-southeast-2.aws.neon.tech/postsql?sslmode=require
 
-// DATABASE_URL="prisma://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlfa2V5IjoiYmNkOGQyMDctNWI0MC00Njg2LWFlNGQtNWU4MDIwMTNhZDRlIiwidGVuYW50X2lkIjoiM2UzOTVkZDNmYTRkODE1YjMwNzllYmZkMzFkZTkxZTBlY2NiNDdiOGIzMDE3NmIxYjhkY2E0MTkyNTE1MDFlZiIsImludGVybmFsX3NlY3JldCI6IjQ5ZThmZmYwLTE5NTMtNDUyMS04MGIyLTRhMzBjMTliMjZiZCJ9.Jm6UN90djbeSBfMFkSyrcQx6SpVZu16d_NFdYSV_VMg"
-// DIRECT_URL="<YOUR_DATABASE_CONNECTION_STRING>"
-// eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlfa2V5IjoiYmNkOGQyMDctNWI0MC00Njg2LWFlNGQtNWU4MDIwMTNhZDRlIiwidGVuYW50X2lkIjoiM2UzOTVkZDNmYTRkODE1YjMwNzllYmZkMzFkZTkxZTBlY2NiNDdiOGIzMDE3NmIxYjhkY2E0MTkyNTE1MDFlZiIsImludGVybmFsX3NlY3JldCI6IjQ5ZThmZmYwLTE5NTMtNDUyMS04MGIyLTRhMzBjMTliMjZiZCJ9.Jm6UN90djbeSBfMFkSyrcQx6SpVZu16d_NFdYSV_VMg
-userRouter.post('/signin', (c) => {
-  return c.json({
-    message: 'Create new user'
+userRouter.post('/signin', async (c) => {
+  const prisma = new PrismaClient({
+    datasourceUrl: c.env.DATABASE_URL,
+}).$extends(withAccelerate())
+
+  const body = await c.req.json();
+  const user = await prisma.user.findUnique({
+    where: {
+      email: body.email,
+      password: body.password
+    }
   })
+  if (!user) {
+    return c.json({
+      message: 'User not found'
+    }, 404)
+  }
+
+  const token = await sign({ id: user.id }, c.env.JWT_SECRET)
+ return c.json({jwt: token});
+ 
 })
 
-export { userRouter } 
+export { userRouter }
