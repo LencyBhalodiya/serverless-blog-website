@@ -9,49 +9,55 @@ type Bindings = {
 }
 const userRouter = new Hono<{ Bindings: Bindings }>()
 
-userRouter.get('/signup', async (c) => {
+userRouter.post('/signup', async (c) => {
   const prisma = new PrismaClient({
     datasourceUrl: c.env.DATABASE_URL,
-}).$extends(withAccelerate())
-  
- const body = await c.req.json();
- const { email, password } = body;
+  }).$extends(withAccelerate())
 
- const user =  await prisma.user.create({
-    data: {
+  try {
+    const body = await c.req.json();
+    const { email, password } = body;
+
+    const user = await prisma.user.create({
+      data: {
         email,
-      password,
-    },
-  })
-  
-  const token = await sign({ id: user.id }, c.env.JWT_SECRET)
-  
-  return c.json({
-    jwt: token
-  })
+        password,
+      },
+    })
+
+    const token = await sign({ id: user.id }, c.env.JWT_SECRET)
+    return c.json({ jwt: token });
+  } catch (error) {
+    c.status(500);
+    return c.json({ message: 'Internal Server Error' })
+  }
 })
 
 userRouter.post('/signin', async (c) => {
   const prisma = new PrismaClient({
     datasourceUrl: c.env.DATABASE_URL,
-}).$extends(withAccelerate())
+  }).$extends(withAccelerate())
 
-  const body = await c.req.json();
-  const user = await prisma.user.findUnique({
-    where: {
-      email: body.email,
-      password: body.password
+  try {
+    const body = await c.req.json();
+    const user = await prisma.user.findUnique({
+      where: {
+        email: body.email,
+        password: body.password
+      }
+    })
+    if (!user) {
+      return c.json({
+        message: 'User not found'
+      }, 404)
     }
-  })
-  if (!user) {
-    return c.json({
-      message: 'User not found'
-    }, 404)
-  }
 
-  const token = await sign({ id: user.id }, c.env.JWT_SECRET)
- return c.json({jwt: token});
- 
+    const token = await sign({ id: user.id }, c.env.JWT_SECRET)
+    return c.json({ jwt: token });
+  } catch (error) {
+    c.status(500);
+    return c.json({ message: 'Internal Server Error' })
+  }
 })
 
 export { userRouter }
